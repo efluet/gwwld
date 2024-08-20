@@ -1,0 +1,67 @@
+library(here)
+library(tidyverse)
+library(sf)
+library(ggplot2)
+library(scales)
+
+# source('theme_raster_map.r')
+# source('line_plot_theme.r')
+# source('get_country_bbox_shp_for_ggplot_map.r')
+
+# /----------------------------------------------------------------------------#
+#/
+
+## NOTE: DEC 6- THERE ARE SOME WEIRD LOCATIONS IN HERE
+usgs_floodperc <- read.csv('../data/sources/usgs/percent_flooded_by_ecoregion.csv') %>% 
+  select(site_number, begin_date, end_date, percent_flooded, geometry) %>% 
+  mutate(network='USGS') %>% 
+  rename(site_name= site_number) %>% 
+  mutate(site_name =as.character(site_name)) %>% 
+  filter(percent_flooded > 0) 
+
+usgs_floodperc <- 
+  usgs_floodperc %>% separate(geometry, c('longitude', 'latitude'), sep=',') %>% 
+  mutate(across(c("longitude", "latitude"), readr::parse_number))
+  
+
+serc <- data.frame(network='COMPASS-FME',
+                   site_name="SERC",
+                        longitude=-76.556279,
+                        latitude= 38.901403)
+
+winous <- data.frame(network='COMPASS-FME',
+                     site_name="Winous Point",
+                     longitude= -82.999265,
+                     latitude= 41.463062)
+
+
+swot_proposal_wells <- 
+  usgs_floodperc %>% 
+  bind_rows(., serc) %>% 
+  bind_rows(., winous) %>% 
+  select(network, site_name, begin_date, end_date, percent_flooded, longitude, latitude)
+
+glimpse(swot_proposal_wells) 
+
+swot_proposal_wells_sf = st_as_sf(swot_proposal_wells, coords = c("longitude", "latitude"), crs = 4326)#, relation_to_geometry = "field")
+
+st_write(swot_proposal_wells_sf, "../swot_proposal_wells.shp")
+
+
+
+swot_proposal_wells <- 
+  bind_rows(serc, winous) %>% 
+  st_as_sf(., coords = c("longitude", "latitude"), crs = 4326)
+#%>% 
+  # select(network, site_name, begin_date, end_date, percent_flooded, longitude, latitude)
+
+
+gw <- st_read("../combined/gw_wells_combined_pts_v2.shp") %>% 
+  mutate(site_name = as.character(site_no)) %>% 
+  mutate(network= source) 
+
+swot_proposal_wells <- bind_rows(gw, swot_proposal_wells) %>% 
+  select(network, site_name, geometry)
+
+st_write(swot_proposal_wells, "../swot_proposal_gw_wells.shp")
+
